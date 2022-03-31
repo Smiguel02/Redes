@@ -10,8 +10,8 @@
 
 //Biblioteca para abrir a API como transmissor
 
-#define BAUDRATE B38400
-#define MODEMDEVICE "/dev/ttyS10"
+#define BAUDRATE B9600
+#define MODEMDEVICE "/dev/ttyS0"
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 #define FALSE 0
 #define TRUE 1
@@ -32,8 +32,8 @@
 #define BCC_R A^UA
 
 
+  int state=0;
 
-int state=0;
 volatile int STOP=FALSE;
 
 struct applicationLayer {
@@ -57,8 +57,7 @@ char frame[MAX_SIZE]; /*Trama*/
 
 void tictoc(){
   printf("Timedout bro\n");
-  state=0;
-
+	state=0;
 }
 
 
@@ -70,6 +69,7 @@ int llopen(int porta){
   struct applicationLayer app;  
   struct linkLayer layer;
   struct termios oldtio,newtio;
+
 
 
   //define port
@@ -94,8 +94,8 @@ int llopen(int porta){
 
   //abrir porta
   //COnfirma se inserimos bem no kernel
-    if ((strcmp("/dev/ttyS10", layer.port)!=0) && 
-  	      (strcmp("/dev/ttyS11", layer.port)!=0)) {
+    if ((strcmp("/dev/ttyS0", layer.port)!=0) && 
+  	      (strcmp("/dev/ttyS1", layer.port)!=0)) {
       printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS11\n");
       exit(1);
     }
@@ -123,8 +123,8 @@ int llopen(int porta){
     /* set input mode (non-canonical, no echo,...) */
     newtio.c_lflag = 0;
 
-    newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
-    newtio.c_cc[VMIN]     = 1;   /* blocking read until 1 chars received */
+    newtio.c_cc[VTIME]    = 1;   /* inter-character timer unused */
+    newtio.c_cc[VMIN]     = 0;   /* blocking read until 1 chars received */
 
 
 
@@ -153,60 +153,83 @@ int llopen(int porta){
 
 
   //Maquina de estados para verificação da mensagem
-  while(1){
+  k=0;
+  while(k<=layer.numTransmissions){
   switch(state){
 
     //escrever informaçao e verificar
     case 0:  
-
+		alarm(0);
+		printf("Estamos em state=0 pela %d vez\n",k);
     if(k>layer.numTransmissions){
       printf("Nao recebeste dados nenhuns amigo, problems de envio\n");break;
     }
     k++;
-    write(fd,write,5);
+    write(fd,input,5);
     state=1;
     alarm(layer.timeout);    
-    continue;
-
+break;
     //receber informaçao
     case 1:  
+		printf("ENtramos na funçao read\n");
+		while(state){
+		(void)read(fd,&output[0],1);
+	}
+		printf("saimos do primeiro read\n");
+		if(output[0]==Flag){
+			printf("Lemos a promeira flag\n");
+			state=2;
+			}else state=0;
     
-    i=0;
-    while (STOP==FALSE) {                            /* loop for input */    
-      if (state) {res = read(fd,&output[i],1);}else break;         //lemos só de 1 em 1 para simplificar as coisas, até pq esta função somehow le 8 bytes at once
-      if ((i>0)&&(output[i]==Flag)) {alarm(0);STOP=TRUE; printf("Our buff leu isto:%s\n", output); state=2;printf("So conseguiste information back na tua %d transmissao\n", k+1);}
-      i++;
-    }
-    STOP=FALSE;
     
-    continue;
-
+break;
   //verificação da mensagem recebida, ja paramos o timer de rececao, porque somos fixes e recebemos tudo
   case 2:
-
-  if(output[0]==Flag){
-    printf("Primeira Flag recebida direito!\n");
-  }else state=0;continue;printf("Erros de transmissao, repeat please bro!\n");
+  while(state){
+  		(void)read(fd,&output[1],1);}
   if(output[1]==A){
-    printf("Address very well received!\n");
-  }else state=0;continue;printf("Erros de transmissao, repeat please bro!\n");
-  if(output[2]==UA){
+	 printf("Address very well received!\n");
+	 state=3;
+	  }else state=0;
+	  
+break;	  
+	  
+	  case 3:
+while(state){
+		(void)read(fd,&output[2],1);}
+	if(output[2]==UA){
     printf("UA IS HERE WITH US TOOOOO!\n");
-  }else state=0;continue;printf("Erros de transmissao, repeat please bro!\n");
-  if(output[3]==BCC_R){
+    state=4;
+}else state=0;
+    
+    
+break;    
+    case 4: 
+    while(state){
+    (void)read(fd,&output[3],1);}
+      if(output[3]==BCC_R){
     printf("What, os bits de verificaçao(BCC) tambem estao bem? Crazyy\n");
-  }else state=0;continue;printf("Erros de transmissao, repeat please bro!\n");
-  if(output[4]==Flag){
+    state=5;
+  }else state=0;printf("Erros de transmissao, repeat please bro!\n");
+    
+break;    
+    case 5:
+    while(state){
+    (void)read(fd,&output[4],1);}
+    if(output[4]==Flag){
     printf("RECEBEMOS TUDO EM CONDIÇOES, CONGRATULATIONS\n");break;
-  }else state=0;continue;printf("Erros de transmissao, repeat please bro!\n");
-
+  }else state=0;printf("Erros de transmissao, repeat please bro!\n");
+    
+    break;
+    
+  
 
   }
   }
 }
 
 int main(){
-  
+  llopen(0);
 }
 
 
