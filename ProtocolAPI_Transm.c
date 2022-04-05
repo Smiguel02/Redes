@@ -30,6 +30,7 @@
 #define UA 0X07
 #define BCC_T A^SET
 #define BCC_R A^UA
+#define C 0x02
 
 
   int state=0;
@@ -227,8 +228,60 @@ break;
 
 }
 
+//n me esquecer de verificar cancelamento do timeout do llopen transmit
+int llwrite(char* buf, int bufSize){
+
+  int cnt=0, i=0, aux, j=0;
+  int inputSize=(bufSize*%8);
+  char *input=malloc(sizeof(char)*(bufSize*2+8));
+  char stuff=0, bcc2[256];
+  input[0]=Flag;
+  input[1]=A;
+  input[2]=C;
+  input[3]=0;
+
+for(j=0;j<2;j++){
+  for(i=0;i<8;i++){
+    aux=(input[1+j]>>i) & 1;
+    printf("aux=%d\n", aux);  //reading just fine
+    if(aux){
+      cnt++;
+    }
+  }
+  if(!(cnt%2)){
+    input[3]=input[3] | (1<<(7-j));
+  }
+  cnt=0;
+}
+printf("BCC1=%d", (int)input[3]);
+
+
+for(j=0;j<bufSize;j++){
+  for(i=0;i<8;i++){
+    //stuff=(stuff<<1)^buf[j]>>i
+    aux=(input[4+j]>>i) & 1;
+    if(aux){
+      cnt++;
+    }
+  }
+  if(!(cnt%2)){
+    input[4+bufSize]=input[4+bufSize] | (1<<(7-j));
+  }
+
+
+  
+  
+  }
+
+
+
+
+}
+
+
 int main(){
-  llopen(10);
+ // llopen(10);
+ llwrite("hey", 3);
 }
 
 
