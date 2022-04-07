@@ -11,7 +11,7 @@
 //Biblioteca para abrir a API como transmissor
 
 #define BAUDRATE B9600
-#define MODEMDEVICE "/dev/ttyS10"
+#define MODEMDEVICE "/dev/ttyS0"
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 #define FALSE 0
 #define TRUE 1
@@ -51,6 +51,8 @@ unsigned int numTransmissions; /*Número de tentativas em caso de falha*/
 char frame[MAX_SIZE]; /*Trama*/
 };
 
+  struct applicationLayer app;  
+
 
 
 //Inicia comunicaçao entre transmitter(util=0) e receiver(util=1)
@@ -67,7 +69,6 @@ int llopen(int porta){
   int i, res,  fd, k=0;
   char *door=malloc(sizeof(char));
   char input[5],output[5];
-  struct applicationLayer app;  
   struct linkLayer layer;
   struct termios oldtio,newtio;
 
@@ -95,9 +96,9 @@ int llopen(int porta){
 
   //abrir porta
   //COnfirma se inserimos bem no kernel
-    if ((strcmp("/dev/ttyS10", layer.port)!=0) && 
+    if ((strcmp("/dev/ttyS0", layer.port)!=0) && 
   	      (strcmp("/dev/ttyS11", layer.port)!=0)) {
-      printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS11\n");
+      printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
       exit(1);
     }
 
@@ -225,63 +226,73 @@ break;
   }
   }
   printf("WE DID IT MOTHERFUCKERS\n");
+  app.fileDescriptor=fd;
+  return 1;
 
 }
 
-//n me esquecer de verificar cancelamento do timeout do llopen transmit
+/*
+
 int llwrite(char* buf, int bufSize){
-
-  int cnt=0, i=0, aux, j=0;
-  int inputSize=(bufSize*%8);
-  char *input=malloc(sizeof(char)*(bufSize*2+8));
-  char stuff=0, bcc2[256];
-  input[0]=Flag;
-  input[1]=A;
-  input[2]=C;
-  input[3]=0;
-
-for(j=0;j<2;j++){
-  for(i=0;i<8;i++){
-    aux=(input[1+j]>>i) & 1;
-    printf("aux=%d\n", aux);  //reading just fine
-    if(aux){
-      cnt++;
-    }
-  }
-  if(!(cnt%2)){
-    input[3]=input[3] | (1<<(7-j));
-  }
-  cnt=0;
-}
-printf("BCC1=%d", (int)input[3]);
+  //iniciar porta para questoes de teste
 
 
-for(j=0;j<bufSize;j++){
-  for(i=0;i<8;i++){
-    //stuff=(stuff<<1)^buf[j]>>i
-    aux=(input[4+j]>>i) & 1;
-    if(aux){
-      cnt++;
-    }
-  }
-  if(!(cnt%2)){
-    input[4+bufSize]=input[4+bufSize] | (1<<(7-j));
-  }
+  int  i=0, aux, k=0, inputSize=bufSize+4;
+  int stuffedSize;
+  char *input=malloc(sizeof(char)*(inputSize)]);
+  char *stuffed=malloc(sizeof(char)*(bufSize*2+8));
+  char bcc2=0;
+  input[0]=A;
+  input[1]=C;
+  input[2]=A^C;
 
 
-  
-  
-  }
-
-
-
-
+//BCC2 creation
+//to be honest n sei de onde vem esta ideia do XOR, so we must ask teacher
+for(i=0;i<bufSize;i++){
+  bcc2^=^buf[i];
 }
 
+//ja temos a nossa beautiful frame without byte stuffing
+strcat(input, buf);
+strcat(input, &bcc);
+
+//Byte Stuffing
+//n tenho de ir verificar bit a bit, porque a leitura é feita byte a byte
+  stuffed[0]=Flag; int inputSize=(bufSize*%8);
+  for(i=1;i<inputSize;i++){
+    if((input[i]=='0x7e') || (input[i]=='0x7d')){
+      stuffed[i+k]='0x7d';
+      k++;
+      stuffed[i+k]=input[i]^'0x20';
+    }else{
+      stuffed[i+k]=input[i];
+    }
+  }
+stuffedSize=i+k;
+
+strcat(stuffed, Flag);
+write(app.fileDescriptor, stuffed, stuffedSize);
+return 1;
+}
+
+*/
 
 int main(){
- // llopen(10);
- llwrite("hey", 3);
+  llopen(0);
+	char buf[40], aux;
+	buf[0]=Flag;
+	buf[1]=A;
+	buf[2]=0x01;
+	buf[3]=A^0x01;
+	printf("where am I\n");
+	strcat(buf, "Hola mina, como estais");
+	printf("Is it the minas\n");
+	aux=Flag;
+	printf("whaaat\n");
+	strcat(buf, &aux);
+	printf("segmentating\n");	
+	write(app.fileDescriptor, buf, 256);
 }
 
 
