@@ -232,7 +232,7 @@ break;
 }
 
 
-/*
+
 int llwrite(char* buf, int bufSize){
   //iniciar porta para questoes de teste
 
@@ -276,7 +276,7 @@ write(app.fileDescriptor, stuffed, stuffedSize);
 return 1;
 }
 
-*/
+
 
 int main(){
   llopen(10);
