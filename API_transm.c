@@ -231,6 +231,8 @@ break;
 
 }
 
+
+
 //n me esquecer de verificar cancelamento do timeout do llopen transmit
 int llwrite(char* buf, int bufSize, int argc, char** argv){
   //iniciar porta para questoes de teste
@@ -249,16 +251,16 @@ int llwrite(char* buf, int bufSize, int argc, char** argv){
 //BCC2 creation
 //to be honest n sei de onde vem esta ideia do XOR, so we must ask teacher
 for(i=0;i<bufSize;i++){
-  bcc2^=^buf[i];
+  bcc2^=buf[i];
 }
 
 //ja temos a nossa beautiful frame without byte stuffing
 strcat(input, buf);
-strcat(input, &bcc);
+strcat(input, &bcc2);
 
 //Byte Stuffing
 //n tenho de ir verificar bit a bit, porque a leitura é feita byte a byte
-  stuffed[0]=Flag; int inputSize=(bufSize*%8);
+  stuffed[0]=Flag; int inputSize=(bufSize*8);
   for(i=1;i<inputSize;i++){
     if((input[i]=='0x7e') || (input[i]=='0x7d')){
       stuffed[i+k]='0x7d';
@@ -271,7 +273,6 @@ strcat(input, &bcc);
 stuffedSize=i+k;
 
 strcat(stuffed, Flag);
-write
 }
 int main(){
  // llopen(10);

@@ -11,7 +11,7 @@
 //Biblioteca para abrir a API como transmissor
 
 #define BAUDRATE B9600
-#define MODEMDEVICE "/dev/ttyS0"
+#define MODEMDEVICE "/dev/ttyS10"
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 #define FALSE 0
 #define TRUE 1
@@ -96,9 +96,9 @@ int llopen(int porta){
 
   //abrir porta
   //COnfirma se inserimos bem no kernel
-    if ((strcmp("/dev/ttyS0", layer.port)!=0) && 
+    if ((strcmp("/dev/ttyS10", layer.port)!=0) && 
   	      (strcmp("/dev/ttyS11", layer.port)!=0)) {
-      printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
+      printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS11\n");
       exit(1);
     }
 
@@ -231,15 +231,15 @@ break;
 
 }
 
-/*
 
+/*
 int llwrite(char* buf, int bufSize){
   //iniciar porta para questoes de teste
 
 
   int  i=0, aux, k=0, inputSize=bufSize+4;
   int stuffedSize;
-  char *input=malloc(sizeof(char)*(inputSize)]);
+  char *input=malloc(sizeof(char)*(inputSize));
   char *stuffed=malloc(sizeof(char)*(bufSize*2+8));
   char bcc2=0;
   input[0]=A;
@@ -250,16 +250,16 @@ int llwrite(char* buf, int bufSize){
 //BCC2 creation
 //to be honest n sei de onde vem esta ideia do XOR, so we must ask teacher
 for(i=0;i<bufSize;i++){
-  bcc2^=^buf[i];
+  bcc2^=buf[i];
 }
 
 //ja temos a nossa beautiful frame without byte stuffing
 strcat(input, buf);
-strcat(input, &bcc);
+strcat(input, &bcc2);
 
 //Byte Stuffing
 //n tenho de ir verificar bit a bit, porque a leitura é feita byte a byte
-  stuffed[0]=Flag; int inputSize=(bufSize*%8);
+  stuffed[0]=Flag; int inputSize=(bufSize*8);
   for(i=1;i<inputSize;i++){
     if((input[i]=='0x7e') || (input[i]=='0x7d')){
       stuffed[i+k]='0x7d';
@@ -279,7 +279,8 @@ return 1;
 */
 
 int main(){
-  llopen(0);
+  llopen(10);
+  /*
 	char buf[40], aux;
 	buf[0]=Flag;
 	buf[1]=A;
@@ -293,6 +294,7 @@ int main(){
 	strcat(buf, &aux);
 	printf("segmentating\n");	
 	write(app.fileDescriptor, buf, 256);
+  */
 }
 
 
