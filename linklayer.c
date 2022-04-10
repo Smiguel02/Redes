@@ -10,6 +10,9 @@
 #define BBC1_T A_T ^ SET // Será usado o mesmo Address no llopen, tanto para Transmitter como Receiver
 #define BCC1_R A_T ^ UA
 
+#define HEADER_SIZE 4
+#define SUP_SIZE 5
+
 /***********************
  * Struct Linklayer received values:
  * ll.serialPort="/dev/ttySx"
@@ -21,28 +24,118 @@
 
 // needs to be global variable, but honestly tenho de ver outra maneira que a stora disse que dava
 
-linkLayer ll;
+struct statistacs{
+  int DataWritten;
+};
 
+
+linkLayer ll;
+struct termios oldtio, newtio;
 int fd;
 int state = 0;
 int S;
 int R;
 
-void abertura()
-{
-  printf("Timedout llopen bro\n");
-  state = 0;
-}
-
 void escrita(){
   printf("Data not received back on llwrite broooo\n");
+  state=0;
 }
+
+//control and expected are very well defined already by the asking fucntion
+//works only for answers
+//returns control variable
+char wait_for_answer(char control){
+
+  int k=0;
+  char output[HEADER_SIZE +1], input[HEADER_SIZE+1];
+
+  output[0]=FLAG;
+  output[1]=A_T;
+  output[2]=control;
+  output[3]=output[1]^output[2];
+  output[4]=FLAG;
+
+    while (state <4)
+    {
+      switch (state)
+      {
+
+      // escrever informaçao e verificar
+      case 0:
+        alarm(0); // reinicia alarm
+        printf("Estamos em state=0 pela %d vez\n", k);
+
+        if (k > ll.numTries)
+        {
+          printf("Nao recebeste dados nenhuns amigo, problems de envio\n");
+          return 0;
+        }
+
+        k++;
+        (void) write(fd, output, HEADER_SIZE+1);
+        printf("%d Bytes written\n", HEADER_SIZE+1);
+        state = 1;
+        alarm(ll.timeOut);
+        break;
+
+      // receber informaçao
+      case 1:
+          printf("À espera da resposta\n");
+        while ((!read(fd, &input[0], 1)) && state)
+        {
+        }
+        if (input[0] == FLAG)
+        {
+          state = 2;
+          alarm(0); // paramos o timer, porque de facto temos uma receçao de dados
+        }
+        else
+        {
+          state = 0;
+        }
+
+        break;
+
+      case 2:
+        while (!read(fd, &input[1], 3)){}
+
+        if(input[3]!=(input[1]^input[2])){
+          printf("ERRO, bcc1 diferente, retransmite");
+          state=0;
+          break;
+        }
+        state++;
+        break;
+        
+      case 3:
+        while (!read(fd, &input[4], 1))
+        {
+        }
+        if (input[4] == FLAG)
+        {
+          printf("RECEBEMOS TUDO EM CONDIÇOES, CONGRATULATIONS\n");
+          state = 4;
+        }
+        else
+        {
+          state = 0;
+          printf("Erros de transmissao, repeat please bro!\n");
+        }
+
+        break;
+      }
+    }
+
+    printf("Recebeste uma resposta quite successfully\n");
+    return input[2];
+
+}
+
 
 // Opens a conection using the "port" parameters defined in struct linkLayer, returns "-1" on error and "1" on sucess
 int llopen(linkLayer connectionParameters)
 {
 
-  struct termios oldtio, newtio;
 
   strcpy(connectionParameters.serialPort,ll.serialPort);
   ll.role=connectionParameters.role;
@@ -358,6 +451,12 @@ int llopen(linkLayer connectionParameters)
   }
 }
 
+void abertura()
+{
+  printf("Timedout llopen bro\n");
+  state = 0;
+}
+
 int llwrite(char *buf, int bufSize)
 {
 
@@ -397,11 +496,11 @@ int llwrite(char *buf, int bufSize)
   stuffed[0] = FLAG;
   for (i = 1; i < inputSize; i++)
   {
-    if ((input[i] == '0x7e') || (input[i] == '0x7d'))
+    if ((input[i] == 0x7e) || (input[i] == 0x7d))
     {
-      stuffed[i + k] = '0x7d';
+      stuffed[i + k] = 0x7d;
       k++;
-      stuffed[i + k] = input[i] ^ '0x20';
+      stuffed[i + k] = input[i] ^ 0x20;
     }
     else
     {
@@ -411,14 +510,79 @@ int llwrite(char *buf, int bufSize)
   stuffedSize = i + k + 1;
 
   strcat(stuffed, FLAG);
-  write(fd, stuffed, stuffedSize);
 
-  //Escrita successful, agora vamos esperar mensagem de resposta
 
-  alarm(ll.timeOut);
 
-  while(!read(fd, input, 5)){}
+  state=0;
+  while(state<2){
 
+    switch (state){
+      
+      case 0:
+      alarm(0);
+      write(fd, stuffed, stuffedSize);
+      alarm(ll.timeOut);
+
+      break;
+
+      case 1:
+
+      while(!read(fd, output, 5)){}
+      i=0;
+      while(state && (i<5)){
+        switch (i){
+
+          case 0:
+            if(output[i]!=FLAG){
+              state=0;printf("Transmission error, repeat\n");
+            }
+            i++;
+            break;
+
+
+          case 1:
+
+            if(output[i]!=A_T){
+              state=0;printf("Transmission error, repeat\n");
+            }
+            i++;
+            break;
+
+          //xecar como funciona o S :)
+          case 2:
+            if(output[i]!=UA){
+              state=0;printf("Transmission error, repeat\n");
+            }
+            i++;
+            break;
+
+          case 3:
+
+            if(output[i]!=(output[i-1]^output[i-2])){
+              state=0;printf("Transmission error, repeat\n");
+            }
+            i++;
+            break;
+            
+          case 4:
+
+          if(output[i]!=FLAG){
+              state=0;printf("Transmission error, repeat\n");
+            }
+            i++;
+            break;
+
+ 
+        }
+
+      }
+      alarm(0);
+      break;
+
+  }
+  }
+
+  printf("llwrite was successful\n");
 
   return 1;
 }
@@ -429,109 +593,310 @@ int llwrite(char *buf, int bufSize)
 // Receive data in packet
 int llread(char *packet)
 {
-  int i, fd, length = 0;
-  char Read_buf[MAX_PAYLOAD_SIZE * 2], new_buf[2 * MAX_PAYLOAD_SIZE];
+  int i, fd, length = 0, new_bufSize=0;
+  char Read_buf[MAX_PAYLOAD_SIZE * 2], new_buf[HEADER_SIZE + MAX_PAYLOAD_SIZE];
+  char output[5];
+  char bcc2=0;
 
-  while (length < 0)
-  {
-    length = read(fd, Read_buf, 1);
-  }
 
-  // printf("packet lenght is %d \n", length);
-  //char *new_buf = malloc(sizeof(char) * (length));
   char *stuffed = malloc(sizeof(char) * (length * 2 + 8));
 
-  new_buf[0] = FLAG;
-  new_buf[1] = A_T;
-  new_buf[2] = UA;
-  new_buf[3] = BCC1_R;
-  new_buf[4] = FLAG;
+  output[0] = FLAG;
+  output[1] = A_T;
+  output[2] = UA;
+  output[3] = output[1]^output[2];
+  output[4] = FLAG;
 
-  while (1)
-  {
-    i = 0;
+  
+  i=0;
+  for(i=0;i<4;i++){
     (void)read(fd, &Read_buf[i], 1);
-
-    if ((Read_buf[i] == FLAG) && (i > 0))
-    {
-      break;
+    if(Read_buf[0]!=FLAG){
+      return 0;
     }
-    i++;
-    printf("Entrou\n");
   }
 
-  int k = 0;
-  for (int j = 0; j < i; j++)
-  {
-
-    if (Read_buf[j] == 0x7d)
-    {
-      if (Read_buf[j + 1] == 0x05e)
-      {
-        new_buf[k] = 0x7e;
-        k++;
-        printf("Leu 1 \n");
-        continue;
-      }
-      else if (Read_buf[j + 1] == 0x05d)
-      {
-        new_buf[k] = Read_buf[j];
-        k++;
-        printf("Leu 2 \n");
-        continue;
-      }
-    }
-    new_buf[k] = Read_buf[j];
-    printf("ta \n");
-    k++;
-  }
-
-  if (i == length)
-  {
-    printf("Nao recebmos flags, tentar outra vez\n");
+  if(Read_buf[3]!=(Read_buf[1]^Read_buf[2])){
     return 0;
   }
 
-  // Byte Stuffing
-  // n tenho de ir verificar bit a bit, porque a leitura é feita byte a byte
-
-
-  stuffed[0] = FLAG;
-  int stuffedSize;
-  int inputSize = (MAX_PAYLOAD_SIZE * 2);
-
-  for (i = 4; i < inputSize; i++)
+  while (1)
   {
-    if ((new_buf[i] == '0x7d'))
+    (void)read(fd, &Read_buf[i], 1);
+
+    if ((Read_buf[i] == FLAG) )
     {
-      if (new_buf[i + 1] == '0x5e')
-      {
-        // alterar para 0x7e
-        stuffed[i + k] = '0x7e';
-      }
-      else
-      { 
-        stuffed[i + k] = '0x7d';
-        k++;
-        stuffed[i + k] = new_buf[i] ^ '0x20';
-      }
-    }
-    else
-    {
-      stuffed[i + k] = new_buf[i];
+      i++;
+      break;
     }
     i++;
   }
-  stuffedSize = i + k;
 
-  strcat(stuffed, FLAG);
+  //i=size of vector
+  int k = -1;
+  int j=0;
 
-(void)write(fd, new_buf, 5);
+    while(Read_buf[k+HEADER_SIZE]!=FLAG)
+    {
+      if(Read_buf[k+HEADER_SIZE]==0x7d){
+        j++;
+        k++;
+        new_buf[k-j]=Read_buf[k+HEADER_SIZE]^0x20;
+      }else
+      {
+        new_buf[k-j]=Read_buf[k+HEADER_SIZE];
+      }
+      bcc2^=new_buf[k-j];
+      k++;
+    }
 
+  new_bufSize=k-2;
+  
+  if(bcc2){
+    printf("Error in received data, trying again\n");
+    return 0;
+  }
+
+
+(void)write(fd, output, 5);
+
+return new_bufSize;
 
 }
 
 
 
 // Closes previously opened connection; if showStatistics==TRUE, link layer should print statistics in the console on close
-int llclose(int showStatistics);
+int llclose(int showStatistics){
+
+  printf("Closing this motherfucker\n");
+  int k=0;
+  char close[HEADER_SIZE+1], received[HEADER_SIZE+1], conf[HEADER_SIZE+1];
+
+  close[0]=FLAG;
+  close[1]=A_T;
+  close[2]=DISC;
+  close[3]=A_T^DISC;
+  close[4]=FLAG;
+
+  conf[0]=FLAG;
+  conf[1]=A_T;
+  conf[2]=UA;
+  conf[3]=A_T^UA;
+  conf[4]=FLAG;
+
+  k=0;
+  state=0;
+    switch(ll.role){
+      case TRANSMITTER:
+
+      while(state<7){
+        switch(state){
+
+          case 0:
+            alarm(0); // reinicia alarm
+          printf("Estamos em state=0 pela %d vez\n", k);
+
+        if (k >ll.numTries)
+        {
+          printf("Nao conseguimos fechar, wormholeee\n");
+          break;
+        }
+
+        k++;
+        (void) write(fd, close, HEADER_SIZE+1);
+        state = 1;
+        alarm(ll.timeOut);
+        
+        break;
+
+          case 1:
+          
+          while ((!read(fd, &received[0], 1)) && state)
+        {
+        }
+        printf("saimos do primeiro read\n");
+        if (received[0] == FLAG)
+        {
+          printf("Lemos a prImeira flag :)\n");
+          state = 2;
+          alarm(0); // paramos o timer, porque de facto temos uma receçao de dados
+        }
+        else
+        {
+          state = 0;
+        }
+
+        break;
+
+      case 2:
+        while (!read(fd, &received[1], 1))
+        {
+        }
+        if (received[1] == A_T)
+        {
+          printf("Address very well received!\n");
+          state = 3;
+        }
+        else
+        {
+          state = 0;
+        }
+
+        break;
+
+      case 3:
+        while (!read(fd, &received[2], 1))
+        {
+        }
+        if (received[2] == DISC)
+        {
+          printf("UA IS HERE WITH US TOOOOO!\n");
+          state = 4;
+        }
+        else
+        {
+          state = 0;
+          printf("Erros de transmissao, repeat please bro!\n");
+        }
+
+        break;
+      case 4:
+        while (!read(fd, &received[3], 1))
+        {
+        }
+        if (received[3] == DISC^A_T)
+        {
+          printf("What, os bits de verificaçao(BCC) tambem estao bem? Crazyy\n");
+          state = 5;
+        }
+        else
+        {
+          state = 0;
+          printf("Erros de transmissao, repeat please bro!\n");
+        }
+        break;
+      case 5:
+        while (!read(fd, &received[4], 1))
+        {
+        }
+        if (received[4] == FLAG)
+        {
+          printf("RECEBEMOS TUDO EM CONDIÇOES, CONGRATULATIONS\n");
+          state = 6;
+        }
+        else
+        {
+          state = 0;
+          printf("Erros de transmissao, repeat please bro!\n");
+        }
+
+        break;
+
+        case 6:
+          (void)write(fd, conf, HEADER_SIZE+1);
+          state++;
+        }
+
+
+      }
+
+
+      break;
+
+     case RECEIVER:
+        state=0;
+        while(1){
+        switch(state){
+          case 0:
+          while ((!read(fd, &received[0], 1)) && state)
+        {
+        }
+        printf("saimos do primeiro read\n");
+        if (received[0] == FLAG)
+        {
+          printf("Lemos a prImeira flag :)\n");
+          state++;
+          alarm(0); // paramos o timer, porque de facto temos uma receçao de dados
+        }
+        else
+        {
+          state = 0;
+        }
+
+        break;
+
+      case 2:
+        while (!read(fd, &received[1], 1))
+        {
+        }
+        if (received[1] == A_T)
+        {
+          printf("Address very well received!\n");
+          state = 3;
+        }
+        else
+        {
+          state = 0;
+        }
+
+        break;
+
+      case 3:
+        while (!read(fd, &received[2], 1))
+        {
+        }
+        if (received[2] == DISC)
+        {
+          printf("UA IS HERE WITH US TOOOOO!\n");
+          state = 4;
+        }
+        else
+        {
+          state = 0;
+          printf("Erros de transmissao, repeat please bro!\n");
+        }
+
+        break;
+      case 4:
+        while (!read(fd, &received[3], 1))
+        {
+        }
+        if (received[3] == DISC^A_T)
+        {
+          printf("What, os bits de verificaçao(BCC) tambem estao bem? Crazyy\n");
+          state = 5;
+        }
+        else
+        {
+          state = 0;
+          printf("Erros de transmissao, repeat please bro!\n");
+        }
+        break;
+      case 5:
+        while (!read(fd, &received[4], 1))
+        {
+        }
+        if (received[4] == FLAG)
+        {
+          printf("RECEBEMOS TUDO EM CONDIÇOES, CONGRATULATIONS\n");
+          state = 6;
+        }
+        else
+        {
+          state = 0;
+          printf("Erros de transmissao, repeat please bro!\n");
+        }
+
+        break;
+
+
+          
+
+        }
+        }
+      break;
+    }
+  
+
+}
